@@ -174,8 +174,8 @@ if __name__ == "__main__":
     Careful: We need to split manually here to ensure we stratify by patient
     """
 
-    root = "/media/fabian/My Book/datasets/CHAOS_challenge/Train_Sets"
-    root_test = "/media/fabian/My Book/datasets/CHAOS_challenge/Test_Sets"
+    root      = "../../data/Sample/Train_Sets"
+    root_test = "../../data/Sample/Test_Sets"
     out_base = nnUNet_raw_data
     # CT
     # we ignore CT because
@@ -423,9 +423,174 @@ if __name__ == "__main__":
 
     save_json(json_dict, join(output_folder, "dataset.json"))
 
+    ##############################################################
+    # Variant 3
+    ##############################################################
+
+    patient_ids = []
+    patient_ids_test = []
+
+    output_folder = join(out_base, "Task101_CHAOS_Task_1")
+    output_images = join(output_folder, "imagesTr")
+    output_imagesTs = join(output_folder, "imagesTs")
+    output_labels = join(output_folder, "labelsTr")
+    maybe_mkdir_p(output_images)
+    maybe_mkdir_p(output_imagesTs)
+    maybe_mkdir_p(output_labels)
+
+    # Process CT train
+    d = join(root, "CT")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name = "CT_" + p
+
+        gt_dir = join(d, p, "Ground")
+        seg = convert_CT_seg(load_png_stack(gt_dir)[::-1])
+
+        img_dir = join(d, p, "DICOM_anon")
+        img_outfile = join(output_images, patient_name + "_0000.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        seg_itk = sitk.GetImageFromArray(seg.astype(np.uint8))
+        seg_itk = copy_geometry(seg_itk, img_sitk)
+        sitk.WriteImage(seg_itk, join(output_labels, patient_name + ".nii.gz"))
+        patient_ids.append(patient_name)
+
+    # Process CT test
+    d = join(root_test, "CT")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name = "CT_" + p
+
+        gt_dir = join(d, p, "Ground")
+
+        img_dir = join(d, p, "DICOM_anon")
+        img_outfile = join(output_imagesTs, patient_name + "_0000.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        patient_ids_test.append(patient_name)
+
+    # Process T1 train
+    d = join(root, "MR")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name_in = "T1_in_" + p
+        patient_name_out = "T1_out_" + p
+        gt_dir = join(d, p, "T1DUAL", "Ground")
+        seg = convert_MR_seg(load_png_stack(gt_dir)[::-1])
+
+        img_dir = join(d, p, "T1DUAL", "DICOM_anon", "InPhase")
+        img_outfile = join(output_images, patient_name_in + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_dir = join(d, p, "T1DUAL", "DICOM_anon", "OutPhase")
+        img_outfile = join(output_images, patient_name_out + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        seg_itk = sitk.GetImageFromArray(seg.astype(np.uint8))
+        seg_itk = copy_geometry(seg_itk, img_sitk)
+        sitk.WriteImage(seg_itk, join(output_labels, patient_name_in + ".nii.gz"))
+        sitk.WriteImage(seg_itk, join(output_labels, patient_name_out + ".nii.gz"))
+        patient_ids.append(patient_name_out)
+        patient_ids.append(patient_name_in)
+
+    # Process T1 test
+    d = join(root_test, "MR")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name_in = "T1_in_" + p
+        patient_name_out = "T1_out_" + p
+        gt_dir = join(d, p, "T1DUAL", "Ground")
+
+        img_dir = join(d, p, "T1DUAL", "DICOM_anon", "InPhase")
+        img_outfile = join(output_imagesTs, patient_name_in + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_dir = join(d, p, "T1DUAL", "DICOM_anon", "OutPhase")
+        img_outfile = join(output_imagesTs, patient_name_out + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        patient_ids_test.append(patient_name_out)
+        patient_ids_test.append(patient_name_in)
+
+    # Process T2 train
+    d = join(root, "MR")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name = "T2_" + p
+
+        gt_dir = join(d, p, "T2SPIR", "Ground")
+        seg = convert_MR_seg(load_png_stack(gt_dir)[::-1])
+
+        img_dir = join(d, p, "T2SPIR", "DICOM_anon")
+        img_outfile = join(output_images, patient_name + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        seg_itk = sitk.GetImageFromArray(seg.astype(np.uint8))
+        seg_itk = copy_geometry(seg_itk, img_sitk)
+        sitk.WriteImage(seg_itk, join(output_labels, patient_name + ".nii.gz"))
+        patient_ids.append(patient_name)
+
+    # Process T2 test
+    d = join(root_test, "MR")
+    patients = subdirs(d, join=False)
+    for p in patients:
+        patient_name = "T2_" + p
+
+        gt_dir = join(d, p, "T2SPIR", "Ground")
+
+        img_dir = join(d, p, "T2SPIR", "DICOM_anon")
+        img_outfile = join(output_imagesTs, patient_name + "_0001.nii.gz")
+        _ = dicom2nifti.convert_dicom.dicom_series_to_nifti(img_dir, img_outfile, reorient_nifti=False)
+
+        img_sitk = sitk.ReadImage(img_outfile)
+        img_sitk_npy = sitk.GetArrayFromImage(img_sitk)
+        patient_ids_test.append(patient_name)
+
+    json_dict = OrderedDict()
+    json_dict['name'] = "Chaos Challenge Task 1"
+    json_dict['description'] = "nothing"
+    json_dict['tensorImageSize'] = "4D"
+    json_dict['reference'] = "https://chaos.grand-challenge.org/Data/"
+    json_dict['licence'] = "see https://chaos.grand-challenge.org/Data/"
+    json_dict['release'] = "0.0"
+    json_dict['modality'] = {
+        "0": "CT",
+        "1": "MRI"
+    }
+    json_dict['labels'] = {
+        "0": "background",
+        "1": "liver",
+        "2": "right kidney",
+        "3": "left kidney",
+        "4": "spleen",
+    }
+    json_dict['numTraining'] = len(patient_ids)
+    json_dict['numTest'] = 0
+    json_dict['training'] = [{'image': "./imagesTr/%s.nii.gz" % i, "label": "./labelsTr/%s.nii.gz" % i} for i in
+                             patient_ids]
+    json_dict['test'] = []
+
+    save_json(json_dict, join(output_folder, "dataset.json"))
+
     #################################################
     # custom split
     #################################################
+    patients = subdirs(join(root, "CT"), join=False)
+    task_name_variant0 = "Task101_CHAOS_Task_1"  
+    output_preprocessed_v0 = join(preprocessing_output_dir, task_name_variant0)
+    maybe_mkdir_p(output_preprocessed_v0)
+
     patients = subdirs(join(root, "MR"), join=False)
     task_name_variant1 = "Task037_CHAOS_Task_3_5_Variant1"
     task_name_variant2 = "Task038_CHAOS_Task_3_5_Variant2"
@@ -435,6 +600,17 @@ if __name__ == "__main__":
 
     output_preprocessed_v2 = join(preprocessing_output_dir, task_name_variant2)
     maybe_mkdir_p(output_preprocessed_v2)
+
+    splits = []
+    for fold in range(5):
+        tr, val = get_split_deterministic(patients, fold, 5, 12345)
+        train = ["T2_" + i for i in tr] + ["T1_in_" + i for i in tr] + ["T1_out_" + i for i in tr] + ["CT_" + i for i in tr]
+        validation = ["T2_" + i for i in val] + ["T1_in_" + i for i in val] + ["T1_out_" + i for i in val] + ["CT_" + i for i in val]
+        splits.append({
+            'train': train,
+            'val': validation
+        })
+    save_pickle(splits, join(output_preprocessed_v0, "splits_final.pkl"))
 
     splits = []
     for fold in range(5):
