@@ -279,7 +279,8 @@ class NetworkTrainer(object):
             'optimizer_state_dict': optimizer_state_dict,
             'lr_scheduler_state_dict': lr_sched_state_dct,
             'plot_stuff': (self.all_tr_losses, self.all_val_losses, self.all_val_losses_tr_mode,
-                           self.all_val_eval_metrics)}
+                           self.all_val_eval_metrics),
+            'best_stuff' : (self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA)}
         if self.amp_grad_scaler is not None:
             save_this['amp_grad_scaler'] = self.amp_grad_scaler.state_dict()
 
@@ -304,6 +305,12 @@ class NetworkTrainer(object):
         if isfile(join(self.output_folder, "model_best.model")):
             return self.load_best_checkpoint(train)
         raise RuntimeError("No checkpoint found")
+
+    def load_final_checkpoint(self, train=False):
+        filename = join(self.output_folder, "model_final_checkpoint.model")
+        if not isfile(filename):
+            raise RuntimeError("Final checkpoint not found. Expected: %s. Please finish the training first." % filename)
+        return self.load_checkpoint(filename, train=train)
 
     def load_checkpoint(self, fname, train=True):
         self.print_to_log_file("loading checkpoint", fname, "train=", train)
@@ -371,6 +378,11 @@ class NetworkTrainer(object):
         self.all_tr_losses, self.all_val_losses, self.all_val_losses_tr_mode, self.all_val_eval_metrics = checkpoint[
             'plot_stuff']
 
+        # load best loss (if present)
+        if 'best_stuff' in checkpoint.keys():
+            self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA = checkpoint[
+                'best_stuff']
+
         # after the training is done, the epoch is incremented one more time in my old code. This results in
         # self.epoch = 1001 for old trained models when the epoch is actually 1000. This causes issues because
         # len(self.all_tr_losses) = 1000 and the plot function will fail. We can easily detect and correct that here
@@ -387,8 +399,8 @@ class NetworkTrainer(object):
         self._maybe_init_amp()
 
     def _maybe_init_amp(self):
-        if self.fp16 and self.amp_grad_scaler is None and torch.cuda.is_available():
-                self.amp_grad_scaler = GradScaler()
+        if self.fp16 and self.amp_grad_scaler is None:
+            self.amp_grad_scaler = GradScaler()
 
     def plot_network_architecture(self):
         """
@@ -399,6 +411,9 @@ class NetworkTrainer(object):
         pass
 
     def run_training(self):
+        if not torch.cuda.is_available():
+            self.print_to_log_file("WARNING!!! You are attempting to run training on a CPU (torch.cuda.is_available() is False). This can be VERY slow!")
+
         _ = self.tr_gen.next()
         _ = self.val_gen.next()
 
